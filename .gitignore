@@ -1,0 +1,11 @@
+*.pyc
+.DS_Store
+*.esproj
+_trial_temp
+.coverage
+htmlcov
+twistd.pid
+twistd.log
+dist
+build
+.sass-cache
