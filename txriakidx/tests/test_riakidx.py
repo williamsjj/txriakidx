@@ -48,13 +48,17 @@ class RiakIdxPseudoTestCase(unittest.TestCase):
     """
     
     def setUp(self):
-        self.client = riakidx.RiakClientIndexed()
+        self.client = riakidx.RiakClient()
         self.bucket = self.client.bucket("test_bucket")
         self.sample_record = {"string": "test!",
                               "integer" : 50,
                               "float" : 3.14,
                               "unicode" : u"test some more!"}
-        self.riak_keys = ["prefix_testkey"]
+        self.riak_keys = ["prefix_testkey",
+                          "prefix_key1",
+                          "prefix_key2",
+                          "prefix_key3",
+                          "prefix_key4"]
     
     @defer.inlineCallbacks
     def tearDown(self):
@@ -70,34 +74,157 @@ class RiakIndexTestCase(RiakIdxPseudoTestCase):
     
     def test_create_index_instance_ok(self):
         "Validate RiakIndex instance with allowed field datatype."
-        idx = riakidx.RiakIndex(key_prefix="prefix_",
+        idx = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                key_prefix="prefix",
                                 indexed_field="field",
                                 field_type="int")
-        self.assertEqual(idx._prefix, "prefix_")
+        self.assertEqual(idx._prefix, "prefix")
         self.assertEqual(idx._field, "field")
         self.assertEqual(idx._type, "int")
+        self.assertEqual(idx._client, None)
         
     
     def test_create_index_instance_bad_datatype(self):
         "Validate RiakIndex raises error on invalid index field datatype."
         self.assertRaises(errors.IllegalDatatypeError,
                           riakidx.RiakIndex,
-                          key_prefix="prefix_",
+                          bucket=self.bucket.get_name(),
+                          key_prefix="prefix",
                           indexed_field="field",
                           field_type="dict")
     
     def test_decode_index_key(self):
         "Validates index key decoding."
-        idx = riakidx.RiakIndex(key_prefix="prefix_",
+        idx = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                key_prefix="prefix",
                                 indexed_field="field",
                                 field_type="int")
         key, val = idx._decode_index_key("testkey/test%21")
         self.assertEqual(key, "testkey")
         self.assertEqual(val, "test!")
+    
+    def test_query_no_client(self):
+        "Validate running query before adding to a client fails."
+        idx = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                key_prefix="prefix",
+                                indexed_field="field",
+                                field_type="int")
+        self.assertFailure(idx.query("", ""), errors.IndexError)
+    
+    @defer.inlineCallbacks
+    def test_query_string_match(self):
+        "Test querying index for match against string field"
+        # Setup index definition
+        idx1 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="prefix",
+                                 indexed_field="string",
+                                 field_type="str")
+        self.client.add_index(idx1)
+        
+        # Generate & load the keys
+        test_keys = {"key1" : "test!",
+                     "key2" : "test!",
+                     "key3" : "hello",
+                     "key4" : "hello-yo"}
+        
+        for key in test_keys.keys():
+            contents = {"string" : test_keys[key]}
+            obj = yield self.bucket.new("prefix_" + key, contents).store()
+        
+        # Find all keys in the index matching "test" 
+        # for the 'string' field.
+        result = yield idx1.query("eq", "test!")
+        actual_result = sorted(result)
+        
+        expected_result = sorted([[u"test_bucket", u"prefix_key1", u"test!"],
+                                  [u"test_bucket", u"prefix_key2", u"test!"]])
+        self.assertEqual(expected_result, actual_result)
+    
+    @defer.inlineCallbacks
+    def test_query_integer_match(self):
+        "Test querying index for match against integer field"
+        # Setup index definition
+        idx1 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="prefix",
+                                 indexed_field="integer",
+                                 field_type="int")
+        self.client.add_index(idx1)
+        
+        # Generate & load the keys
+        test_keys = {"key1" : 3,
+                     "key2" : 3,
+                     "key3" : 4,
+                     "key4" : 4}
+        
+        for key in test_keys.keys():
+            contents = {"integer" : test_keys[key]}
+            obj = yield self.bucket.new("prefix_" + key, contents).store()
+        
+            # Find all keys in the index with value < 4
+            # for the 'integer' field.
+        result = yield idx1.query("less_than", 4)
+        actual_result = sorted(result)
+        
+        expected_result = sorted([[u"test_bucket", u"prefix_key1", 3],
+                                  [u"test_bucket", u"prefix_key2", 3]])
+        self.assertEqual(expected_result, actual_result)
+    
+    @defer.inlineCallbacks
+    def test_query_float_match(self):
+        "Test querying index for match against float field"
+        # Setup index definition
+        idx1 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="prefix",
+                                 indexed_field="float",
+                                 field_type="float")
+        self.client.add_index(idx1)
+        
+        # Generate & load the keys
+        test_keys = {"key1" : 3.14,
+                     "key2" : 3.14,
+                     "key3" : 4.14,
+                     "key4" : 4.0}
+        
+        for key in test_keys.keys():
+            contents = {"float" : test_keys[key]}
+            obj = yield self.bucket.new("prefix_" + key, contents).store()
+        
+        # Find all keys in the index with value < 4
+        # for the 'float' field.
+        result = yield idx1.query("less_than", 4)
+        actual_result = sorted(result)
+        
+        expected_result = sorted([[u"test_bucket", u"prefix_key1", 3.14],
+                                  [u"test_bucket", u"prefix_key2", 3.14]])
+        self.assertEqual(expected_result, actual_result)
+    
+    @defer.inlineCallbacks
+    def test_query_invalid_compare_op(self):
+        "Test querying index using an illegal comparison/predicate operation."
+        # Setup index definition
+        idx1 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="prefix",
+                                 indexed_field="string",
+                                 field_type="str")
+        self.client.add_index(idx1)
+        
+        # Generate & load the keys
+        test_keys = {"key1" : "test!",
+                     "key2" : "test!",
+                     "key3" : "hello",
+                     "key4" : "hello-yo"}
+        
+        for key in test_keys.keys():
+            contents = {"string" : test_keys[key]}
+            obj = yield self.bucket.new("prefix_" + key, contents).store()
+        
+        # Make sure illegal compare ops raise IndexError
+        yield self.assertFailure(idx1.query("my_bizarro_opprint", "test!"),
+                                 errors.IndexError)
 
-class RiakClientIndexedTestCase(RiakIdxPseudoTestCase):
+class RiakClientTestCase(RiakIdxPseudoTestCase):
     """
-    Tests cases for RiakClientIndexed
+    Tests cases for RiakClient
     """
     
     def test_create_client(self):
@@ -106,13 +233,16 @@ class RiakClientIndexedTestCase(RiakIdxPseudoTestCase):
     
     def test_add_index_ok(self):
         "Add an index to the client successfully."
-        idx = riakidx.RiakIndex(key_prefix="testpref",
+        bucket = self.bucket.get_name()
+        idx = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                key_prefix="testpref",
                                 indexed_field="field_1",
                                 field_type="int")
         self.client.add_index(idx)
-        self.assertTrue(self.client._indexes.has_key("testpref"))
-        self.assertTrue(self.client._indexes["testpref"].has_key("field_1"))
-        self.assertEqual(idx, self.client._indexes["testpref"]["field_1"])
+        self.assertTrue(self.client._indexes.has_key(bucket+"=testpref"))
+        self.assertTrue(self.client._indexes[bucket+"=testpref"].has_key("field_1"))
+        self.assertEqual(idx._client, self.client)
+        self.assertEqual(idx, self.client._indexes[bucket+"=testpref"]["field_1"])
     
     def test_add_index_failed(self):
         "Add an invalid index to the client...fails."
@@ -120,12 +250,12 @@ class RiakClientIndexedTestCase(RiakIdxPseudoTestCase):
         self.assertRaises(errors.IndexError, self.client.add_index, idx)
     
 
-class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
+class RiakObjectTestCase(RiakIdxPseudoTestCase):
     """
-    Test cases for RiakObjectIndexed
+    Test cases for RiakObject
     """
     
-    idx_bkt_form = "idx=%(field)s=%(key_prefix)s"
+    idx_bkt_form = "idx=%(bucket)s=%(key_prefix)s=%(field)s"
     idx_key_form = "%(key)s/%(field_value)s"
     
     @defer.inlineCallbacks
@@ -133,7 +263,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         "Create a new object and associated index."
         
         # Setup index definition
-        idx = riakidx.RiakIndex(key_prefix="prefix",
+        idx = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                key_prefix="prefix",
                                 indexed_field="string",
                                 field_type="str")
         self.client.add_index(idx)
@@ -146,7 +277,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         obj_test = yield self.bucket.get("prefix_testkey")
         self.assertEqual(self.sample_record, obj_test.get_data())
         
-        index_bucket = self.idx_bkt_form % {"field" : "string",
+        index_bucket = self.idx_bkt_form % {"bucket": self.bucket.get_name(),
+                                            "field" : "string",
                                             "key_prefix" : "prefix"}
         index_key = self.idx_key_form % {"key" : "testkey",
                                          "field_value" : urllib.quote(self.sample_record["string"])}
@@ -164,10 +296,12 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         "Create a new object with indexes on multiple fields"
         
         # Setup index definition
-        idx1 = riakidx.RiakIndex(key_prefix="prefix",
+        idx1 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="prefix",
                                  indexed_field="string",
                                  field_type="str")
-        idx2 = riakidx.RiakIndex(key_prefix="prefix",
+        idx2 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="prefix",
                                  indexed_field="integer",
                                  field_type="int")
         self.client.add_index(idx1)
@@ -182,7 +316,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         self.assertEqual(self.sample_record, obj_test.get_data())
         
         # Validate index 1 stored properly
-        index_bucket = self.idx_bkt_form % {"field" : "string",
+        index_bucket = self.idx_bkt_form % {"bucket": self.bucket.get_name(),
+                                            "field" : "string",
                                             "key_prefix" : "prefix"}
         index_key = self.idx_key_form % {"key" : "testkey",
                                          "field_value" : urllib.quote(self.sample_record["string"])}
@@ -196,7 +331,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         self.assertEqual(self.sample_record["string"], val)
         
         # Validate index 2 stored properly
-        index_bucket = self.idx_bkt_form % {"field" : "integer",
+        index_bucket = self.idx_bkt_form % {"bucket" : self.bucket.get_name(),
+                                            "field" : "integer",
                                             "key_prefix" : "prefix"}
         index_key = self.idx_key_form % {"key" : "testkey",
                                          "field_value" : urllib.quote(str(self.sample_record["integer"]))}
@@ -214,20 +350,21 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         field_val = "my_utterly/obfuscated!key="
         field_encoded_val = "my_utterly/obfuscated%21key%3D"
         self.assertEqual(field_encoded_val,
-                         riakidx.RiakObjectIndexed._escval(field_val))
+                         riakidx.RiakObject._escval(field_val))
     
     def test_unescape_field_value(self):
         "Test unescaping index field values."
         field_val = "my_utterly/obfuscated!key="
         field_encoded_val = "my_utterly/obfuscated%21key%3D"
         self.assertEqual(field_val,
-                         riakidx.RiakObjectIndexed._unescval(field_encoded_val))
+                         riakidx.RiakObject._unescval(field_encoded_val))
     
     @defer.inlineCallbacks
     def test_store_noindexes(self):
         "Test storing a key with no indexes makes no indexes."
         # Setup index definition
-        idx1 = riakidx.RiakIndex(key_prefix="noprefix",
+        idx1 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="noprefix",
                                  indexed_field="string",
                                  field_type="str")
         self.client.add_index(idx1)
@@ -241,7 +378,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         self.assertEqual(self.sample_record, obj_test.get_data())
         
         # Validate no index was created
-        index_bucket = self.idx_bkt_form % {"field" : "string",
+        index_bucket = self.idx_bkt_form % {"bucket" : self.bucket.get_name(),
+                                            "field" : "string",
                                             "key_prefix" : "noprefix"}
         index_key = self.idx_key_form % {"key" : "testkey",
                                          "field_value" : urllib.quote(self.sample_record["string"])}
@@ -254,13 +392,15 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
     def test_store_index_noprevindex_newindexclash(self):
         "Test storing a new key and index where the new index already exists."
         # Setup index definition
-        idx1 = riakidx.RiakIndex(key_prefix="prefix",
+        idx1 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="prefix",
                                  indexed_field="string",
                                  field_type="str")
         self.client.add_index(idx1)
         
         # Pre-create the index key
-        index_bucket = self.idx_bkt_form % {"field" : "string",
+        index_bucket = self.idx_bkt_form % {"bucket" : self.bucket.get_name(),
+                                            "field" : "string",
                                             "key_prefix" : "prefix"}
         index_key = self.idx_key_form % {"key" : "testkey",
                                          "field_value" : urllib.quote(self.sample_record["string"])}
@@ -285,7 +425,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
     def test_store_index_previndex_ok(self):
         "Test storing a key with a new value, where a previous index existed."
         # Create key and index the first time
-        idx1 = riakidx.RiakIndex(key_prefix="prefix",
+        idx1 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="prefix",
                                  indexed_field="string",
                                  field_type="str")
         self.client.add_index(idx1)
@@ -293,7 +434,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         obj = self.bucket.new("prefix_testkey", self.sample_record)
         yield obj.store()
         
-        index_bucket = self.idx_bkt_form % {"field" : "string",
+        index_bucket = self.idx_bkt_form % {"bucket" : self.bucket.get_name(),
+                                            "field" : "string",
                                             "key_prefix" : "prefix"}
         index_key_old = self.idx_key_form % {"key" : "testkey",
                                              "field_value" : urllib.quote(self.sample_record["string"])}
@@ -329,7 +471,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
     def test_store_index_previndex_previndexmissing(self):
         "Test updating a key and index, but the old index key is missing."
         # Create key and index the first time
-        idx1 = riakidx.RiakIndex(key_prefix="prefix",
+        idx1 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="prefix",
                                  indexed_field="string",
                                  field_type="str")
         self.client.add_index(idx1)
@@ -337,7 +480,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         obj = self.bucket.new("prefix_testkey", self.sample_record)
         yield obj.store()
         
-        index_bucket = self.idx_bkt_form % {"field" : "string",
+        index_bucket = self.idx_bkt_form % {"bucket" : self.bucket.get_name(),
+                                            "field" : "string",
                                             "key_prefix" : "prefix"}
         index_key_old = self.idx_key_form % {"key" : "testkey",
                                              "field_value" : urllib.quote(self.sample_record["string"])}
@@ -377,7 +521,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
     def test_delete_noindexes(self):
         "Test deleting a key that has no indexes."
          # Setup index definition
-        idx1 = riakidx.RiakIndex(key_prefix="noprefix",
+        idx1 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="noprefix",
                                  indexed_field="string",
                                  field_type="str")
         self.client.add_index(idx1)
@@ -391,7 +536,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         self.assertEqual(self.sample_record, obj_test.get_data())
         
         # Validate no index was created
-        index_bucket = self.idx_bkt_form % {"field" : "string",
+        index_bucket = self.idx_bkt_form % {"bucket" : self.bucket.get_name(),
+                                            "field" : "string",
                                             "key_prefix" : "noprefix"}
         index_key = self.idx_key_form % {"key" : "testkey",
                                          "field_value" : urllib.quote(self.sample_record["string"])}
@@ -408,10 +554,12 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
     def test_delete_previndex_ok(self):
         "Test deleting a key that has indexes."
         # Setup index definition
-        idx1 = riakidx.RiakIndex(key_prefix="prefix",
+        idx1 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="prefix",
                                  indexed_field="string",
                                  field_type="str")
-        idx2 = riakidx.RiakIndex(key_prefix="prefix",
+        idx2 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="prefix",
                                  indexed_field="integer",
                                  field_type="int")
         self.client.add_index(idx1)
@@ -426,7 +574,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         self.assertEqual(self.sample_record, obj_test.get_data())
         
         # Validate indexes were created
-        index_bucket = self.idx_bkt_form % {"field" : "string",
+        index_bucket = self.idx_bkt_form % {"bucket" : self.bucket.get_name(),
+                                            "field" : "string",
                                             "key_prefix" : "prefix"}
         index_key = self.idx_key_form % {"key" : "testkey",
                                          "field_value" : urllib.quote(self.sample_record["string"])}
@@ -434,7 +583,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         obj_idx_test = yield idx_bucket.get(index_key)
         self.assertTrue(obj_idx_test.exists())
         
-        index_bucket = self.idx_bkt_form % {"field" : "integer",
+        index_bucket = self.idx_bkt_form % {"bucket" : self.bucket.get_name(),
+                                            "field" : "integer",
                                             "key_prefix" : "prefix"}
         index_key = self.idx_key_form % {"key" : "testkey",
                                          "field_value" : urllib.quote(str(self.sample_record["integer"]))}
@@ -448,7 +598,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         self.assertFalse(obj_test.exists())
         
         # Validate indexes are gone
-        index_bucket = self.idx_bkt_form % {"field" : "string",
+        index_bucket = self.idx_bkt_form % {"bucket" : self.bucket.get_name(),
+                                            "field" : "string",
                                             "key_prefix" : "prefix"}
         index_key = self.idx_key_form % {"key" : "testkey",
                                          "field_value" : urllib.quote(self.sample_record["string"])}
@@ -456,7 +607,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         obj_idx_test = yield idx_bucket.get(index_key)
         self.assertFalse(obj_idx_test.exists())
         
-        index_bucket = self.idx_bkt_form % {"field" : "integer",
+        index_bucket = self.idx_bkt_form % {"bucket" : self.bucket.get_name(),
+                                            "field" : "integer",
                                             "key_prefix" : "prefix"}
         index_key = self.idx_key_form % {"key" : "testkey",
                                          "field_value" : urllib.quote(str(self.sample_record["integer"]))}
@@ -468,10 +620,12 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
     def test_delete_previndex_previndex_missing(self):
         "Test deleting a key that should have indexes but they're missing."
         # Setup index definition
-        idx1 = riakidx.RiakIndex(key_prefix="prefix",
+        idx1 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="prefix",
                                  indexed_field="string",
                                  field_type="str")
-        idx2 = riakidx.RiakIndex(key_prefix="prefix",
+        idx2 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="prefix",
                                  indexed_field="integer",
                                  field_type="int")
         self.client.add_index(idx1)
@@ -486,7 +640,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         self.assertEqual(self.sample_record, obj_test.get_data())
         
         # Validate indexes were created
-        index_bucket = self.idx_bkt_form % {"field" : "string",
+        index_bucket = self.idx_bkt_form % {"bucket" : self.bucket.get_name(),
+                                            "field" : "string",
                                             "key_prefix" : "prefix"}
         index_key_1 = self.idx_key_form % {"key" : "testkey",
                                          "field_value" : urllib.quote(self.sample_record["string"])}
@@ -494,7 +649,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         obj_idx_test = yield idx_bucket.get(index_key_1)
         self.assertTrue(obj_idx_test.exists())
         
-        index_bucket = self.idx_bkt_form % {"field" : "integer",
+        index_bucket = self.idx_bkt_form % {"bucket" : self.bucket.get_name(),
+                                            "field" : "integer",
                                             "key_prefix" : "prefix"}
         index_key_2 = self.idx_key_form % {"key" : "testkey",
                                          "field_value" : urllib.quote(str(self.sample_record["integer"]))}
@@ -514,7 +670,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         self.assertFalse(obj_test.exists())
         
         # Validate indexes are gone
-        index_bucket = self.idx_bkt_form % {"field" : "string",
+        index_bucket = self.idx_bkt_form % {"bucket" : self.bucket.get_name(),
+                                            "field" : "string",
                                             "key_prefix" : "prefix"}
         index_key = self.idx_key_form % {"key" : "testkey",
                                          "field_value" : urllib.quote(self.sample_record["string"])}
@@ -522,7 +679,8 @@ class RiakObjectIndexedTestCase(RiakIdxPseudoTestCase):
         obj_idx_test = yield idx_bucket.get(index_key)
         self.assertFalse(obj_idx_test.exists())
         
-        index_bucket = self.idx_bkt_form % {"field" : "integer",
+        index_bucket = self.idx_bkt_form % {"bucket" : self.bucket.get_name(),
+                                            "field" : "integer",
                                             "key_prefix" : "prefix"}
         index_key = self.idx_key_form % {"key" : "testkey",
                                          "field_value" : urllib.quote(str(self.sample_record["integer"]))}

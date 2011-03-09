@@ -35,7 +35,7 @@
 #
 ########################################################################################
 
-import urllib
+import urllib, json
 import errors
 from copy import copy
 from txriak import riak
@@ -45,7 +45,7 @@ from twisted.internet import defer
 # when we monkey patch.
 riak.RiakObjectOrig = riak.RiakObject
 
-class RiakClientIndexed(riak.RiakClient):
+class RiakClient(riak.RiakClient):
     """
     Sub-class of RiakClient extended to build the index definitions.
     """
@@ -54,7 +54,7 @@ class RiakClientIndexed(riak.RiakClient):
                 prefix='riak', mapred_prefix='mapred',
                 client_id=None, r_value=2, w_value=2, dw_value=0):
         """
-        Construct a new RiakClientIndexed object.
+        Construct a new RiakClient object.
         """
         
         self._indexes = {}
@@ -73,22 +73,22 @@ class RiakClientIndexed(riak.RiakClient):
         if not isinstance(index, RiakIndex):
             raise errors.IndexError("Not a RiakIndex instance.")
         
-        if not self._indexes.has_key(index._prefix):
-            self._indexes[index._prefix] = {}
+        if not self._indexes.has_key(index._bucket+"="+index._prefix):
+            self._indexes[index._bucket+"="+index._prefix] = {}
         
-        self._indexes[index._prefix][index._field] = index
+        self._indexes[index._bucket+"="+index._prefix][index._field] = index
+        index._client = self
 
-class RiakObjectIndexed(riak.RiakObjectOrig):
+class RiakObject(riak.RiakObjectOrig):
     """
     RiakObjectIndex implements transparent indexing for Riak keys.
     """
     
-    idx_bkt_form = "idx=%s=%s"
-    idx_key_form = "%s/%s"
+    
     
     def __init__(self, client, bucket, key=None):
         """
-        Construct a new RiakObjectIndexed object.
+        Construct a new RiakObject object.
         """
         
         self._old_data = None
@@ -147,24 +147,31 @@ class RiakObjectIndexed(riak.RiakObjectOrig):
         
         # Maintain the indexes if the data key belongs to an index
         key_prefix, key_name = self._key.split("_", 1)
+        bucket = self.get_bucket().get_name()
         
-        if self._client._indexes.has_key(key_prefix):
+        
+        if self._client._indexes.has_key(bucket+"="+key_prefix):
             
             # Maintain indexes for each indexed field
-            for field in self._client._indexes[key_prefix].keys():
-                idx_bucket = self.idx_bkt_form % (field, key_prefix)
+            for field in self._client._indexes[bucket+"="+key_prefix].keys():
+                index = self._client._indexes[bucket+"="+key_prefix][field]
+                idx_bucket = index.idx_bkt_form % {"bucket": bucket,
+                                                   "field" : field,
+                                                   "key_prefix" : key_prefix}
                 idx_bucket = self._client.bucket(idx_bucket)
             
                 # Delete the old index key if there's a previous value
                 if self._old_data:
                     old_value = self._escval(self._old_data[field])
-                    idx_old = self.idx_key_form % (key_name, old_value)
+                    idx_old = index.idx_key_form % {"key" : key_name,
+                                                    "field_val" : old_value}
                     idx_old = yield idx_bucket.get(idx_old)
                     yield riak.RiakObjectOrig.delete(idx_old)
             
                 # Create the new index key
                 new_value = self._escval(self.get_data()[field])
-                idx_new = self.idx_key_form % (key_name, new_value)
+                idx_new = index.idx_key_form % {"key": key_name, 
+                                                "field_val" : new_value}
                 idx_new = idx_bucket.new(idx_new)
                 yield riak.RiakObjectOrig.store(idx_new, w, dw)
         
@@ -183,14 +190,19 @@ class RiakObjectIndexed(riak.RiakObjectOrig):
         
         # Delete the old index key if the data key belongs to an index
         key_prefix, key_name = self._key.split("_", 1)
-        if self._client._indexes.has_key(key_prefix):
+        bucket = self.get_bucket().get_name()
+        if self._client._indexes.has_key(bucket+"="+key_prefix):
             
-            for field in self._client._indexes[key_prefix].keys():
+            for field in self._client._indexes[bucket+"="+key_prefix].keys():
+                index = self._client._indexes[bucket+"="+key_prefix][field]
                 curr_value = self._escval(curr_data[field])
-                idx_bucket = self.idx_bkt_form % (field, key_prefix)
+                idx_bucket = index.idx_bkt_form % {"bucket": bucket,
+                                                   "field" : field, 
+                                                   "key_prefix" : key_prefix}
                 idx_bucket = self._client.bucket(idx_bucket)
             
-                idx_curr = self.idx_key_form % (key_name, curr_value)
+                idx_curr = index.idx_key_form % {"key": key_name,
+                                                 "field_val" : curr_value}
                 idx_curr = yield idx_bucket.get(idx_curr)
                 yield riak.RiakObjectOrig.delete(idx_curr)
         
@@ -204,25 +216,31 @@ class RiakIndex(object):
     Defines and queries a Riak secondary index.
     """
     
-    def __init__(self, key_prefix, indexed_field, field_type="str"):
+    idx_bkt_form = "idx=%(bucket)s=%(key_prefix)s=%(field)s"
+    idx_key_form = "%(key)s/%(field_val)s"
+    
+    def __init__(self, bucket, key_prefix, indexed_field, field_type="str"):
         """
         Define a new secondary index. Any keys stored that start with
         *key_prefix* will be detected and an index value automatically
         stored.
         
-        :param key_prefix: Key prefix of keys to be included in index.
+        :param bucket: Bucket containing the keys to be included in the index.
+        :param key_prefix: Key prefix of keys to be included in the index.
         :param indexed_field: Field name in JSON dictionary to be indexed.
-        :param field_type: Data type of field.
+        :param field_type: Data type of field (int, float, str, unicode)
         
         :returns: None
         """
         
+        self._bucket = bucket
         self._prefix = key_prefix
         self._field = indexed_field
+        self._client = None
         
         # Make sure field isn't a complex datatype
-        field_type = str(field_type)
-        if not field_type.lower() in ["int", "float", "str", "unicode"]:
+        field_type = str(field_type).lower()
+        if not field_type in ["int", "float", "str", "unicode"]:
             raise errors.IllegalDatatypeError(field_type)
         
         self._type = field_type
@@ -239,6 +257,73 @@ class RiakIndex(object):
         
         key, value = key_name.split("/", 1)
         return (key, urllib.unquote(value))
+    
+    @defer.inlineCallbacks
+    def query(self, compare_op, value, timeout=300000):
+        """
+        Query the index to find keys where the indexed field
+        matches the spec'd value according to the spec'd
+        comparison operation (i.e. eq, less_than_eq, etc.)
+        
+        NB: Comparison operations are any of the predicate
+        functions listed on the Basho Wiki:
+        
+        `Predicate Functions <http://wiki.basho.com/Key-Filters.html#Predicate-functions>`
+        
+        :param compare_op: (string) Comparison/predicate operation.
+        :param value: (undefined) Value to compare against the indexed field.
+        :param timeout: (integer in secs) How long the query should be allowed to run.
+        
+        :returns: List of (<data_bucket>, <data_key>, <value>) tuples
+        """
+        
+        if not self._client:
+            raise errors.IndexError("The index has not been added to " \
+                                    "a RiakClient instance.")
+        
+        # Build key filter
+        key_filters = [["urldecode"],
+                       ["tokenize", "/", 2]]
+        
+        if self._type == "int":
+            key_filters.append(["string_to_int"])
+        elif self._type == "float":
+            key_filters.append(["string_to_float"])
+        else:
+            value = urllib.quote(value)
+        
+        key_filters.append([compare_op, value])
+        
+        # Create key filtered MapReduce job
+        idx_bucket = self.idx_bkt_form % {"bucket": self._bucket,
+                                          "field": self._field,
+                                          "key_prefix": self._prefix}
+        job = self._client.add({"bucket" : urllib.quote(idx_bucket),
+                                "key_filters" : key_filters})
+        
+        # Use the built-in Riak identity reduce
+        job.reduce(["riak_kv_mapreduce", "reduce_identity"])
+        
+        # Run the query and parse the results
+        try:
+            result = yield job.run(timeout)
+        except Exception, e:
+            raise errors.IndexError(str(e))
+        
+        decoded_result = []
+        for match in result:
+            x, data_bucket, prefix, y = urllib.unquote(match[0]).split("=", 3)
+            data_key, value = urllib.unquote(match[1]).split("/", 1)
+            value = urllib.unquote(value)
+            
+            if self._type == "int":
+                value = int(value)
+            elif self._type == "float":
+                value = float(value)
+            
+            decoded_result.append([data_bucket, prefix+"_"+data_key, value])
+        
+        defer.returnValue(decoded_result)
 
-# Install RiakObjectIndexed via monkey patch
-riak.RiakObject = RiakObjectIndexed
+# Install RiakObject via monkey patch
+riak.RiakObject = RiakObject
