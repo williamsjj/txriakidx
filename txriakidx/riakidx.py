@@ -35,7 +35,7 @@
 #
 ########################################################################################
 
-import urllib, json
+import urllib
 import errors
 from copy import copy
 from txriak import riak
@@ -103,6 +103,10 @@ class RiakObject(riak.RiakObjectOrig):
         
         :returns: string
         """
+        
+        # Convert booleans to integers
+        if isinstance(value, bool):
+            value = int(value)
         
         return urllib.quote(str(value), safe="")
     
@@ -228,7 +232,7 @@ class RiakIndex(object):
         :param bucket: Bucket containing the keys to be included in the index.
         :param key_prefix: Key prefix of keys to be included in the index.
         :param indexed_field: Field name in JSON dictionary to be indexed.
-        :param field_type: Data type of field (int, float, str, unicode)
+        :param field_type: Data type of field (int, float, bool, str, unicode)
         
         :returns: None
         """
@@ -240,7 +244,7 @@ class RiakIndex(object):
         
         # Make sure field isn't a complex datatype
         field_type = str(field_type).lower()
-        if not field_type in ["int", "float", "str", "unicode"]:
+        if not field_type in ["int", "float", "bool", "str", "unicode"]:
             raise errors.IllegalDatatypeError(field_type)
         
         self._type = field_type
@@ -289,6 +293,9 @@ class RiakIndex(object):
             key_filters.append(["string_to_int"])
         elif self._type == "float":
             key_filters.append(["string_to_float"])
+        elif self._type == "bool":
+            key_filters.append(["string_to_int"])
+            value = int(value)
         else:
             value = urllib.quote(value, safe="")
         
@@ -320,6 +327,8 @@ class RiakIndex(object):
                 value = int(value)
             elif self._type == "float":
                 value = float(value)
+            elif self._type == "bool":
+                value = bool(value)
             
             decoded_result.append([data_bucket, prefix+"_"+data_key, value])
         

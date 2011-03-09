@@ -170,6 +170,35 @@ class RiakIndexTestCase(RiakIdxPseudoTestCase):
         self.assertEqual(expected_result, actual_result)
     
     @defer.inlineCallbacks
+    def test_query_boolean_match(self):
+        "Test querying index for match against boolean field"
+        # Setup index definition
+        idx1 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="prefix",
+                                 indexed_field="boolean",
+                                 field_type="bool")
+        self.client.add_index(idx1)
+        
+        # Generate & load the keys
+        test_keys = {"key1" : True,
+                     "key2" : True,
+                     "key3" : False,
+                     "key4" : False}
+        
+        for key in test_keys.keys():
+            contents = {"boolean" : test_keys[key]}
+            obj = yield self.bucket.new("prefix_" + key, contents).store()
+        
+        # Find all keys in the index with value
+        # True.
+        result = yield idx1.query("eq", True)
+        actual_result = sorted(result)
+        
+        expected_result = sorted([[u"test_bucket", u"prefix_key1", True],
+                                  [u"test_bucket", u"prefix_key2", True]])
+        self.assertEqual(expected_result, actual_result)
+    
+    @defer.inlineCallbacks
     def test_query_float_match(self):
         "Test querying index for match against float field"
         # Setup index definition
