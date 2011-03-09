@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 ####################################################################
 # FILENAME: riakidx.py
 # PROJECT: Twisted Riak w/ Indexes
@@ -108,7 +109,7 @@ class RiakObject(riak.RiakObjectOrig):
         if isinstance(value, bool):
             value = int(value)
         
-        return urllib.quote(str(value), safe="")
+        return urllib.quote(unicode(value).encode("utf-8"), safe="")
     
     @staticmethod
     def _unescval(value):
@@ -120,8 +121,7 @@ class RiakObject(riak.RiakObjectOrig):
         
         :returns: string
         """
-        
-        return urllib.unquote(value)
+        return urllib.unquote(str(value)).decode("utf-8")
     
     def set_data(self, data):
         """
@@ -297,7 +297,7 @@ class RiakIndex(object):
             key_filters.append(["string_to_int"])
             value = int(value)
         else:
-            value = urllib.quote(value, safe="")
+            value = RiakObject._escval(value)
         
         key_filters.append([compare_op, value])
         
@@ -321,7 +321,7 @@ class RiakIndex(object):
         for match in result:
             x, data_bucket, prefix, y = urllib.unquote(match[0]).split("=", 3)
             data_key, value = urllib.unquote(match[1]).split("/", 1)
-            value = urllib.unquote(value)
+            value = RiakObject._unescval(value)
             
             if self._type == "int":
                 value = int(value)

@@ -82,4 +82,6 @@ To unpack an index key name:
 2. Split the decoded key name on `/` to get the data key name and the indexed value.
 3. URL decode the indexed value.
 
+## Unicode/Internationalization Notes ##
 
+txRiakIdx fully supports indexing Unicode field values (buckets, prefixes and field name must be ASCII though). Just make sure the field values are UTF-8 (no other non-ASCII encodings are supported). All ASCII field values are first converted to UTF-8 before being URL encoded and indexed.

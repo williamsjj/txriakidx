@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 ####################################################################
 # FILENAME: test_riakidx.py
 # PROJECT: Twisted Riak w/ Indexes
@@ -138,6 +139,35 @@ class RiakIndexTestCase(RiakIdxPseudoTestCase):
         
         expected_result = sorted([[u"test_bucket", u"prefix_key1", u"test!"],
                                   [u"test_bucket", u"prefix_key2", u"test!"]])
+        self.assertEqual(expected_result, actual_result)
+        
+    @defer.inlineCallbacks
+    def test_query_unicode_match(self):
+        "Test querying index for match against unicode field"
+        # Setup index definition
+        idx1 = riakidx.RiakIndex(bucket=self.bucket.get_name(),
+                                 key_prefix="prefix",
+                                 indexed_field="string",
+                                 field_type="str")
+        self.client.add_index(idx1)
+        
+        # Generate & load the keys
+        test_keys = {"key1" : u"日本人",
+                     "key2" : u"日本人",
+                     "key3" : "hello",
+                     "key4" : "hello-yo"}
+        
+        for key in test_keys.keys():
+            contents = {"string" : test_keys[key]}
+            obj = yield self.bucket.new("prefix_" + key, contents).store()
+        
+        # Find all keys in the index matching "test" 
+        # for the 'string' field.
+        result = yield idx1.query("eq", u"日本人")
+        actual_result = sorted(result)
+        
+        expected_result = sorted([[u"test_bucket", u"prefix_key1", u"日本人"],
+                                  [u"test_bucket", u"prefix_key2", u"日本人"]])
         self.assertEqual(expected_result, actual_result)
     
     @defer.inlineCallbacks
