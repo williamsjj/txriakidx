@@ -1,6 +1,7 @@
 *.pyc
 .DS_Store
 *.esproj
+*.egg-info
 _trial_temp
 .coverage
 htmlcov
