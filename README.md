@@ -66,7 +66,7 @@ So when decide you want to see all the keys with `diner_name` of "Bobbie Jo Rick
 
 In otherwords, you get back a list of the original data keys (and their buckets) whose "diner\_name" field is "Bobbie Jo Rickelbacker".
 
-You might have noticed that the RiakIndex definition takes an argument called `indexed_type`. This can be `str`, `unicode`, `int`, or `float`. This allows txRiakIdx to perform searches like: show me all of the order numbers smaller than 2000. txRiakIdx will transparently convert the integer to a string when storing the index key, and will then tell the key filter to treat the value like a integer when you query.
+You might have noticed that the RiakIndex definition takes an argument called `indexed_type`. This can be `str`, `unicode`, `int`, `bool` or `float`. This allows txRiakIdx to perform searches like: show me all of the order numbers smaller than 2000. txRiakIdx will transparently convert the integer to a string when storing the index key, and will then tell the key filter to treat the value like a integer when you query.
 
 The `RiakIndex.query()` function accepts any Riak key filter predicate function as a comparison operator. A list of the predicate function names is here: [http://wiki.basho.com/Key-Filters.html#Predicate-functions](http://wiki.basho.com/Key-Filters.html#Predicate-functions)
 
