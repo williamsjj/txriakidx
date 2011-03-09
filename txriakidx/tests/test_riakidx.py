@@ -348,7 +348,7 @@ class RiakObjectTestCase(RiakIdxPseudoTestCase):
     def test_escape_field_value(self):
         "Test escaping index field values."
         field_val = "my_utterly/obfuscated!key="
-        field_encoded_val = "my_utterly/obfuscated%21key%3D"
+        field_encoded_val = "my_utterly%2Fobfuscated%21key%3D"
         self.assertEqual(field_encoded_val,
                          riakidx.RiakObject._escval(field_val))
     

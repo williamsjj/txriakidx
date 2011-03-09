@@ -104,7 +104,7 @@ class RiakObject(riak.RiakObjectOrig):
         :returns: string
         """
         
-        return urllib.quote(str(value))
+        return urllib.quote(str(value), safe="")
     
     @staticmethod
     def _unescval(value):
@@ -290,7 +290,7 @@ class RiakIndex(object):
         elif self._type == "float":
             key_filters.append(["string_to_float"])
         else:
-            value = urllib.quote(value)
+            value = urllib.quote(value, safe="")
         
         key_filters.append([compare_op, value])
         
