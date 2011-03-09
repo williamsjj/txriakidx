@@ -70,5 +70,16 @@ You might have noticed that the RiakIndex definition takes an argument called `i
 
 The `RiakIndex.query()` function accepts any Riak key filter predicate function as a comparison operator. A list of the predicate function names is here: [http://wiki.basho.com/Key-Filters.html#Predicate-functions](http://wiki.basho.com/Key-Filters.html#Predicate-functions)
 
+## Encoding values ##
+
+Since we're using the Riak REST/HTTP API, all of our bucket and key names are URL encoded. So `idx=my_orders=order=diner_name` becomes `idx%3Dmy_orders=order%3Ddiner_name`, and `order_12345/joe` becomes `order_123456%2Fjoe`. However, we could run into the issue where the value being indexed contains a `/` character which would confuse Riak's key filter tokenizer. So first we URL encode the value being indexed, and then concatenate it to the key name and finally URL encode the entire key name.
+
+So `order_12345/Bobbie Jo Rickelbacker` becomes `order_12345/Bobbie%2520Jo%2520Rickelbacker`. 
+
+To unpack an index key name:
+
+1. URL decode the entire key name.
+2. Split the decoded key name on `/` to get the data key name and the indexed value.
+3. URL decode the indexed value.
 
 

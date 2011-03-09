@@ -36,7 +36,7 @@
 
 from setuptools import setup, find_packages
  
-version = '0.5'
+version = '0.5.1'
  
 setup(name='txRiakIdx',
       version=version,
@@ -47,7 +47,7 @@ setup(name='txRiakIdx',
       author='Jason Williams',
       author_email='jasonjwwilliams@gmail.com',
       url='https://github.com/williamsjj/txriakidx',
-      download_url='https://github.com/williamsjj/txriakidx/zipball/v0.5',
+      download_url='https://github.com/williamsjj/txriakidx/zipball/v0.5.1',
       license='Apache 2.0',
       packages=find_packages(exclude=['ez_setup', 'examples', 'tests', 'old*']),
       zip_safe=False,
