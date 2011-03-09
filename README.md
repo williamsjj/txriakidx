@@ -38,9 +38,11 @@ __You can index multiple fields in the key too. Just make a `RiakIndex` definiti
 
 An index entry is simply another Riak key in a specially-named bucket, with a specially-named key name. It's easier to show with an example. Let's say you have this Riak key:
 
-_Bucket:_ `my_orders`
-_Key Name:_ `order_12345`
-_Value:_ `{"order_number" : 123456789, "diner_name" : "Bobbie Jo Rickelbacker"}`
+__Bucket:___ `my_orders`
+
+__Key Name:__ `order_12345`
+
+__Value:__ `{"order_number" : 123456789, "diner_name" : "Bobbie Jo Rickelbacker"}`
 
 And you define your index on the `diner_name` field of the JSON dictionary:
 
@@ -51,9 +53,11 @@ And you define your index on the `diner_name` field of the JSON dictionary:
 
 That index definition tells txRiakIdx to create an index for the `diner_name` field in keys within the `my_orders` bucket that start with the `order` key prefix (txRiakIdx expects the key prefix and key name to be separated by \_). When you create the `order_12345` order key, here's the index key that txRiakIdx creates:
 
-_Bucket:_ `idx=my_orders=order=diner_name`
-_Key Name:_ `order_12345/Bobbie Jo Rickelbacker`
-_Value:_ (empty)
+__Bucket:__ `idx=my_orders=order=diner_name`
+
+__Key Name:__ `order_12345/Bobbie Jo Rickelbacker`
+
+__Value:__ (empty)
 
 
 So when decide you want to see all the keys with `diner_name` of "Bobbie Jo Rickelbacker", txRiakIdx tells Riak (using key filters) to find all of the keys in `idx=my_orders=order=diner_name` where "Bobbie Jo Rickelbacker" is found after the `/` in the index key name. But all your program sees back from the `.query()` command is:
