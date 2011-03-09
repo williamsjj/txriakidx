@@ -74,7 +74,7 @@ The `RiakIndex.query()` function accepts any Riak key filter predicate function 
 
 Since we're using the Riak REST/HTTP API, all of our bucket and key names are URL encoded. So `idx=my_orders=order=diner_name` becomes `idx%3Dmy_orders=order%3Ddiner_name`, and `order_12345/joe` becomes `order_123456%2Fjoe`. However, we could run into the issue where the value being indexed contains a `/` character which would confuse Riak's key filter tokenizer. So first we URL encode the value being indexed, and then concatenate it to the key name and finally URL encode the entire key name.
 
-So `order_12345/Bobbie Jo Rickelbacker` becomes `order_12345/Bobbie%2520Jo%2520Rickelbacker`. 
+So `order_12345/Bobbie Jo Rickelbacker` becomes `order_12345%2FBobbie%2520Jo%2520Rickelbacker`. 
 
 To unpack an index key name:
 
