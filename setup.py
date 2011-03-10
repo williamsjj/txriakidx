@@ -52,5 +52,5 @@ setup(name='txRiakIdx',
       packages=find_packages(exclude=['ez_setup', 'examples', 'tests', 'old*']),
       zip_safe=False,
       install_requires=["Twisted>=10.0",
-                        "txRiak>=0.2.1"]
+                        "txRiak>=0.3.2"]
     )

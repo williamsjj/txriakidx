@@ -22,8 +22,8 @@ BSD licensed. Check the headers of the source files for the specifics.
 ## Requirements & installing ##
 
 * Python 2.6 or newer
-* txRiak (you'll need this [fork](http://github/williamsjj/txriak) until Riak key filter support gets merged in.)
-* Riak 0.14.0 or newer (for key filter support)
+* txRiak 0.3.2 or newer [http://github/williamsjj/txriak](http://github/williamsjj/txriak)
+* Riak 0.14.0 or newer (for key filter support) [http://wiki.basho.com/](http://wiki.basho.com/)
 
 Installing is as simple as cloning this repo or grabbing it from the "Downloads" button and running:
 
