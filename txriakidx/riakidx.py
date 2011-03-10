@@ -177,6 +177,7 @@ class RiakObject(riak.RiakObjectOrig):
                 idx_new = index.idx_key_form % {"key": key_name, 
                                                 "field_val" : new_value}
                 idx_new = idx_bucket.new(idx_new)
+                idx_new.add_link(self)
                 yield riak.RiakObjectOrig.store(idx_new, w, dw)
         
         defer.returnValue(self)

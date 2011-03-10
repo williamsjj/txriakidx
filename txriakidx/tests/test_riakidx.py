@@ -346,6 +346,10 @@ class RiakObjectTestCase(RiakIdxPseudoTestCase):
         obj_idx_test = yield idx_bucket.get(index_key)
         self.assertTrue(obj_idx_test.exists())
         
+        link = obj_idx_test.get_links()[0]
+        self.assertEqual(link.get_key(), "prefix_testkey")
+        self.assertEqual(link.get_bucket(), self.bucket.get_name())
+        
         key, val = idx._decode_index_key(obj_idx_test.get_key())
         self.assertEqual("testkey", key)
         self.assertEqual(self.sample_record["string"], val)
@@ -385,6 +389,10 @@ class RiakObjectTestCase(RiakIdxPseudoTestCase):
         obj_idx_test = yield idx_bucket.get(index_key)
         self.assertTrue(obj_idx_test.exists())
         
+        link = obj_idx_test.get_links()[0]
+        self.assertEqual(link.get_key(), "prefix_testkey")
+        self.assertEqual(link.get_bucket(), self.bucket.get_name())
+        
         key, val = idx1._decode_index_key(obj_idx_test.get_key())
         self.assertEqual("testkey", key)
         self.assertEqual(self.sample_record["string"], val)
@@ -399,6 +407,10 @@ class RiakObjectTestCase(RiakIdxPseudoTestCase):
         idx_bucket = self.client.bucket(index_bucket)
         obj_idx_test = yield idx_bucket.get(index_key)
         self.assertTrue(obj_idx_test.exists())
+        
+        link = obj_idx_test.get_links()[0]
+        self.assertEqual(link.get_key(), "prefix_testkey")
+        self.assertEqual(link.get_bucket(), self.bucket.get_name())
         
         key, val = idx2._decode_index_key(obj_idx_test.get_key())
         self.assertEqual("testkey", key)
