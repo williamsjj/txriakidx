@@ -30,6 +30,13 @@ Installing is as simple as cloning this repo or grabbing it from the "Downloads"
 	cd ./txriakidx
 	python setup.py install
 
+## Building libraries compatible with txRiakIdx's indexing scheme ##
+
+In the `compatibility_test` directory is a utility called `test.py`. It is designed for for anyone who would like to write their own Riak indexing library compatible with txRiakIdx's indexing scheme . It will validate your index output against the reference implementation. 
+
+* `test.py --load` will build a reference set of indexes against the JSON dictionary in `test_record.json` (useful for seeing what the output should be).
+* `test.py --validate` will validate that the expected indexes exist for the contents of `test_record.json`.
+
 ## How the indexing works ##
 
 Indexes work by matching a key prefix and a bucket. For a key name like `order_12345` the key prefix would be `order`. We do this so you can target your indexes on individual types of keys even within a bucket. Every create, update or delete on a key that matches the bucket and key prefix triggers the indexes for that key to be created, updated or deleted respectively.
